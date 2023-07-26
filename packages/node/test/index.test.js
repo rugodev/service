@@ -8,12 +8,12 @@ describe('Service test', function () {
   let service;
 
   before(async () => {
-    service = createService({
+    service = await createService({
       port: 8080
     });
 
-    service.use(async (_, next) => {
-      console.log('something in the middle');
+    service.use(async function (_, next) {
+      this.logger.info('something in the middle');
       await next();
     });
 

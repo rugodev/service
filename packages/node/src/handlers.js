@@ -1,5 +1,6 @@
 import colors from 'colors';
 import cookie from 'cookie';
+import defaultBody from 'http-status';
 import { path } from 'ramda';
 
 export function isResponse(data = {}) {
@@ -63,7 +64,7 @@ export async function logging(ctx, next) {
 
   msgs.push(colors.yellow(`${ctime - ltime}ms`));
 
-  console.log(msgs.join(' '));
+  this.logger.http(msgs.join(' '));
 }
 
 export async function exceptHandler(ctx, next) {
@@ -88,18 +89,8 @@ export async function preprocessing(ctx, next) {
   for (const key in ctx.request.files) {
     form[key] = ctx.request.files[key].filepath;
   }
+  ctx.form = form;
+  ctx.cookies = cookies ? cookie.parse(cookies) : {};
 
-  // args
-  const args = {
-    method: ctx.method,
-    path: ctx.path,
-    // params - not yet,
-    query: ctx.query,
-    headers: ctx.headers,
-    cookies: cookies ? cookie.parse(cookies) : {},
-    form
-  };
-
-  ctx.args = args;
   await next();
 }
