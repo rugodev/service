@@ -1,6 +1,6 @@
 {
   "name": "@rugo/service",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Rugo's Service from NodeJS based on KoaJS",
   "main": "src/index.js",
   "type": "module",

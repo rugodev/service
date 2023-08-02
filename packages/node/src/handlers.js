@@ -1,7 +1,7 @@
 import colors from 'colors';
 import cookie from 'cookie';
 import defaultBody from 'http-status';
-import { path } from 'ramda';
+import { curry, path } from 'ramda';
 
 export function isResponse(data = {}) {
   if (path(['headers', 'location'], data)) {
@@ -90,7 +90,21 @@ export async function preprocessing(ctx, next) {
     form[key] = ctx.request.files[key].filepath;
   }
   ctx.form = form;
+
+  // args
   ctx.cookies = cookies ? cookie.parse(cookies) : {};
+  const args = {
+    method: ctx.method,
+    path: ctx.path,
+    query: ctx.query,
+    headers: ctx.headers,
+    cookies: ctx.headers,
+    form: ctx.form
+  };
+  ctx.args = args;
+
+  // resp
+  ctx.resp = curry(makeResponse)(ctx);
 
   await next();
 }

@@ -12,6 +12,81 @@ import { exceptHandler, logging, makeResponse, preprocessing } from './handlers.
 import { createLogger } from './logger.js';
 import { DIRECTORY_NAME, DIRECTORY_PORT, PING_DELAY, PING_PATH } from './constants.js';
 
+class Service {
+  constructor(name, port, keys) {
+    this.name = name;
+    this.port = port;
+    this.keys = keys;
+
+    this.logger = createLogger(name);
+    this.router = new Router();
+
+    for (const method of methods)
+      this[method] = (...args) =>
+        this.router[method](...args.map((fn) => (typeof fn === 'function' ? fn.bind(this) : fn)));
+  }
+
+  async start() {
+    if (!this.port) throw new Error('Could not find server port');
+
+    const server = new Koa();
+
+    server.keys = this.keys || [];
+    applyQueryString(server);
+    server.use(cors());
+    server.use(koaBody({ multipart: true }));
+
+    server.use(logging.bind(this));
+    server.use(exceptHandler);
+    server.use(preprocessing);
+
+    server.use(this.router.routes());
+    server.use(this.router.allowedMethods());
+
+    await new Promise((resolve) => {
+      this.listener = server.listen(this.port, () => {
+        resolve();
+        this.logger.info(
+          colors.green(
+            `Server is ${colors.bold('running')} at ${colors.yellow(
+              'http://localhost:' + this.port
+            )}`
+          )
+        );
+      });
+    });
+  }
+
+  async stop() {
+    if (this.listener) {
+      await this.listener.close();
+      this.logger.info(
+        colors.red(
+          `Server is ${colors.bold('stopped')} at ${colors.yellow('http://localhost:' + this.port)}`
+        )
+      );
+    }
+  }
+
+  use(...args) {
+    let fnIndex = 0;
+    let usePath = '';
+    if (typeof args[fnIndex] === 'string') {
+      usePath = args[fnIndex];
+      fnIndex++;
+    }
+
+    for (const fn of args.slice(fnIndex)) {
+      if (typeof fn === 'function') this.router.use(usePath, fn.bind(this));
+
+      if (fn instanceof Service)
+        this.router.use(usePath, fn.router.routes(), fn.router.allowedMethods());
+    }
+
+    return this;
+  }
+}
+
 export const createService = async (config) => {
   // directory config
   if (config.name && config.directory) {
@@ -20,61 +95,13 @@ export const createService = async (config) => {
 
   // local config
   const { port, name, keys } = config;
-  if (!port) throw new Error('Could not find server port');
 
   // service & server
-  const service = {};
-
-  const server = new Koa();
-  const router = new Router();
-
-  service.logger = createLogger(name);
-
-  server.keys = keys || [];
-  applyQueryString(server);
-  server.use(cors());
-  server.use(koaBody({ multipart: true }));
-
-  server.use(logging.bind(service));
-  server.use(exceptHandler);
-  server.use(preprocessing);
-
-  service.use = (fn) => router.use(fn.bind(service));
-  for (const method of ['use', ...methods])
-    service[method] = (...args) =>
-      router[method](...args.map((fn) => (typeof fn === 'function' ? fn.bind(service) : fn)));
+  const service = new Service(name, port, keys);
 
   service.get(PING_PATH, async (ctx) => {
     makeResponse(ctx, { body: true });
   });
-
-  // service's methods
-  service.start = async function () {
-    server.use(router.routes());
-    server.use(router.allowedMethods());
-
-    await new Promise((resolve) => {
-      this.listener = server.listen(port, () => {
-        resolve();
-        this.logger.info(
-          colors.green(
-            `Server is ${colors.bold('running')} at ${colors.yellow('http://localhost:' + port)}`
-          )
-        );
-      });
-    });
-  };
-
-  service.stop = async function () {
-    if (this.listener) {
-      await this.listener.close();
-      this.logger.info(
-        colors.red(
-          `Server is ${colors.bold('stopped')} at ${colors.yellow('http://localhost:' + port)}`
-        )
-      );
-    }
-  };
 
   return service;
 };
